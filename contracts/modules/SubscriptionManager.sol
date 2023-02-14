@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/IERC1155Upgradeable.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import "../interfaces/IFactory.sol";
 import "../interfaces/IShop.sol";
@@ -23,21 +24,21 @@ contract SubscriptionManager is
 
     IERC20Upgradeable public token;
     address public recipientAddress;
-    uint256 public minimumTimestampPayment;
+    uint64 public minimumTimestampPayment;
 
     struct Subscription {
-        uint256 subscriptionLevel;
-        uint256 timestamp;
+        uint8 subscriptionLevel;
+        uint64 timestamp;
     }
 
     // Chain ID => DAO Address => Current Subscription
-    mapping(uint256 => mapping(address => Subscription)) private subscriptions;
+    mapping(uint256 => mapping(address => Subscription)) public subscriptions;
 
     // Subscription Level => Timestamp per 1 Token
-    mapping(uint256 => uint256) private pricing;
+    mapping(uint8 => uint64) public pricing;
 
     // NFT Address => Token ID => Issuing Subscription
-    mapping(address => mapping(uint256 => Subscription)) private receivableNft;
+    mapping(address => mapping(uint256 => Subscription)) public receivable1155;
 
     event PaySubscription(
         uint256 indexed chainId,
@@ -46,7 +47,7 @@ contract SubscriptionManager is
         uint256 timestamp
     );
 
-    event PaySubscriptionWithNft(
+    event PaySubscriptionWith1155(
         uint256 indexed chainId,
         address indexed daoAddress,
         address tokenAddress,
@@ -55,13 +56,10 @@ contract SubscriptionManager is
         uint256 timestamp
     );
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {}
-
     function initialize(
         IERC20Upgradeable _token,
         address _recipientAddress,
-        uint256 _minimumTimestampPayment
+        uint64 _minimumTimestampPayment
     ) public initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -72,7 +70,7 @@ contract SubscriptionManager is
     }
 
     function editMinimumTimestampPayment(
-        uint256 _minimumTimestampPayment
+        uint64 _minimumTimestampPayment
     ) external onlyOwner {
         minimumTimestampPayment = _minimumTimestampPayment;
     }
@@ -83,19 +81,19 @@ contract SubscriptionManager is
 
     // IMPROTANT!: low level subscription level must be eq 0
     function editPricing(
-        uint256 _subscriptionLevel,
-        uint256 _timestamp
+        uint8 _subscriptionLevel,
+        uint64 _timestamp
     ) external onlyOwner {
         pricing[_subscriptionLevel] = _timestamp;
     }
 
-    function editReceivableNft(
+    function editReceivable1155(
         address _tokenAddress,
         uint256 _tokenId,
-        uint256 _subscriptionLevel,
-        uint256 _timestamp
+        uint8 _subscriptionLevel,
+        uint64 _timestamp
     ) external onlyOwner {
-        receivableNft[_tokenAddress][_tokenId] = Subscription({
+        receivable1155[_tokenAddress][_tokenId] = Subscription({
             subscriptionLevel: _subscriptionLevel,
             timestamp: _timestamp
         });
@@ -106,8 +104,8 @@ contract SubscriptionManager is
     function setSubscription(
         uint256 _chainId,
         address _dao,
-        uint256 _level,
-        uint256 _timestamp
+        uint8 _level,
+        uint64 _timestamp
     ) external onlyOwner {
         Subscription storage daoSubscription = subscriptions[_chainId][_dao];
         daoSubscription.subscriptionLevel = _level;
@@ -117,7 +115,7 @@ contract SubscriptionManager is
     function pay(
         uint256 _chainId,
         address _dao,
-        uint256 _level,
+        uint8 _level,
         uint256 _tokenAmount
     ) external {
         Subscription storage daoSubscription = subscriptions[_chainId][_dao];
@@ -150,41 +148,43 @@ contract SubscriptionManager is
             (daoSubscription.timestamp - block.timestamp) / currentLevelPricing
         );
 
-        uint256 newTimestamp = (newLevelPricing *
-            (_tokenAmount + alreadyPaidAmount)) + block.timestamp;
-
-        token.safeTransferFrom(msg.sender, recipientAddress, _tokenAmount);
+        uint64 newTimestamp = SafeCast.toUint64(
+            (newLevelPricing * (_tokenAmount + alreadyPaidAmount)) +
+                block.timestamp
+        );
 
         daoSubscription.subscriptionLevel = _level;
         daoSubscription.timestamp = newTimestamp;
 
+        token.safeTransferFrom(msg.sender, recipientAddress, _tokenAmount);
+
         emit PaySubscription(_chainId, _dao, _level, newTimestamp);
     }
 
-    function payWithNft(
+    function payWith1155(
         uint256 _chainId,
         address _dao,
         address _tokenAddress,
         uint256 _tokenId
     ) external {
         Subscription storage daoSubscription = subscriptions[_chainId][_dao];
-        Subscription storage nftSubscription = receivableNft[_tokenAddress][
+        Subscription storage tokenSubscription = receivable1155[_tokenAddress][
             _tokenId
         ];
 
         require(
             daoSubscription.timestamp < block.timestamp ||
-                (nftSubscription.subscriptionLevel >=
+                (tokenSubscription.subscriptionLevel >=
                     daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
         );
 
         require(
-            nftSubscription.timestamp > 0,
-            "SubscriptionManager: unsupported nft"
+            tokenSubscription.timestamp > 0,
+            "SubscriptionManager: unsupported ERC1155"
         );
 
-        uint256 newLevelPricing = pricing[nftSubscription.subscriptionLevel];
+        uint256 newLevelPricing = pricing[tokenSubscription.subscriptionLevel];
 
         uint256 currentLevelPricing = pricing[
             daoSubscription.subscriptionLevel
@@ -196,9 +196,14 @@ contract SubscriptionManager is
             (daoSubscription.timestamp - block.timestamp) / currentLevelPricing
         );
 
-        uint256 newTimestamp = (newLevelPricing * alreadyPaidAmount) +
-            nftSubscription.timestamp +
-            block.timestamp;
+        uint64 newTimestamp = SafeCast.toUint64(
+            (newLevelPricing * alreadyPaidAmount) +
+                tokenSubscription.timestamp +
+                block.timestamp
+        );
+
+        daoSubscription.subscriptionLevel = tokenSubscription.subscriptionLevel;
+        daoSubscription.timestamp = newTimestamp;
 
         IERC1155Upgradeable(_tokenAddress).safeTransferFrom(
             msg.sender,
@@ -208,15 +213,12 @@ contract SubscriptionManager is
             hex""
         );
 
-        daoSubscription.subscriptionLevel = nftSubscription.subscriptionLevel;
-        daoSubscription.timestamp = newTimestamp;
-
-        emit PaySubscriptionWithNft(
+        emit PaySubscriptionWith1155(
             _chainId,
             _dao,
             _tokenAddress,
             _tokenId,
-            nftSubscription.subscriptionLevel,
+            tokenSubscription.subscriptionLevel,
             newTimestamp
         );
     }
