@@ -4,31 +4,28 @@ pragma solidity ^0.8.6;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/IERC1155Upgradeable.sol";
-import "@openzeppelin/contracts/utils/math/SafeCast.sol";
-
-import "../interfaces/IFactory.sol";
-import "../interfaces/IShop.sol";
-import "../interfaces/IDao.sol";
-import "../interfaces/IPrivateExitModule.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
 
 contract SubscriptionManager is
     Initializable,
     OwnableUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    AccessControlEnumerableUpgradeable
 {
-    using SafeERC20Upgradeable for IERC20Upgradeable;
+    using SafeERC20Upgradeable for ERC20Upgradeable;
 
-    IERC20Upgradeable public token;
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+
+    ERC20Upgradeable public token;
     address public recipientAddress;
     uint64 public minimumTimestampPayment;
 
     struct Subscription {
         uint8 subscriptionLevel;
-        uint64 timestamp;
+        uint256 timestamp; // this timestamp is multiplied by 10 ** token.decimals()
     }
 
     // Chain ID => DAO Address => Current Subscription
@@ -38,31 +35,36 @@ contract SubscriptionManager is
     mapping(uint8 => uint64) public pricing;
 
     // NFT Address => Token ID => Issuing Subscription
-    mapping(address => mapping(uint256 => Subscription)) public receivable1155;
+    mapping(address => mapping(uint256 => Subscription))
+        public receivableERC1155;
 
     event PaySubscription(
         uint256 indexed chainId,
         address indexed daoAddress,
-        uint256 subscriptionLevel,
+        uint8 subscriptionLevel,
         uint256 timestamp
     );
 
-    event PaySubscriptionWith1155(
+    event PaySubscriptionWithERC1155(
         uint256 indexed chainId,
         address indexed daoAddress,
         address tokenAddress,
         uint256 tokenId,
-        uint256 subscriptionLevel,
+        uint8 subscriptionLevel,
         uint256 timestamp
     );
 
     function initialize(
-        IERC20Upgradeable _token,
+        ERC20Upgradeable _token,
         address _recipientAddress,
         uint64 _minimumTimestampPayment
     ) public initializer {
         __Ownable_init();
+        __AccessControl_init();
         __UUPSUpgradeable_init();
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(MANAGER_ROLE, msg.sender);
 
         token = _token;
         recipientAddress = _recipientAddress;
@@ -71,45 +73,44 @@ contract SubscriptionManager is
 
     function editMinimumTimestampPayment(
         uint64 _minimumTimestampPayment
-    ) external onlyOwner {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         minimumTimestampPayment = _minimumTimestampPayment;
     }
 
-    function editRecipient(address _recipientAddress) external onlyOwner {
+    function editRecipient(
+        address _recipientAddress
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         recipientAddress = _recipientAddress;
     }
 
-    // IMPROTANT!: low level subscription level must be eq 0
     function editPricing(
         uint8 _subscriptionLevel,
         uint64 _timestamp
-    ) external onlyOwner {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         pricing[_subscriptionLevel] = _timestamp;
     }
 
-    function editReceivable1155(
+    function editReceivableERC1155(
         address _tokenAddress,
         uint256 _tokenId,
         uint8 _subscriptionLevel,
         uint64 _timestamp
-    ) external onlyOwner {
-        receivable1155[_tokenAddress][_tokenId] = Subscription({
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        receivableERC1155[_tokenAddress][_tokenId] = Subscription({
             subscriptionLevel: _subscriptionLevel,
-            timestamp: _timestamp
+            timestamp: _timestamp * (10 ** token.decimals())
         });
     }
 
-    // for highest level custom subscription (pro/enterprice... etc (it doesn't have name right now))
-    // maybe we need to add a manager role so they can manually distribute the subscriptions by themselves?
     function setSubscription(
         uint256 _chainId,
         address _dao,
         uint8 _level,
         uint64 _timestamp
-    ) external onlyOwner {
+    ) external onlyRole(MANAGER_ROLE) {
         Subscription storage daoSubscription = subscriptions[_chainId][_dao];
         daoSubscription.subscriptionLevel = _level;
-        daoSubscription.timestamp = _timestamp;
+        daoSubscription.timestamp = _timestamp * (10 ** token.decimals());
     }
 
     function pay(
@@ -121,12 +122,13 @@ contract SubscriptionManager is
         Subscription storage daoSubscription = subscriptions[_chainId][_dao];
 
         require(
-            daoSubscription.timestamp < block.timestamp ||
+            daoSubscription.timestamp <
+                block.timestamp * (10 ** token.decimals()) ||
                 (_level >= daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
         );
 
-        uint256 newLevelPricing = pricing[_level];
+        uint64 newLevelPricing = pricing[_level];
 
         require(
             newLevelPricing > 0,
@@ -134,24 +136,24 @@ contract SubscriptionManager is
         );
 
         require(
-            newLevelPricing * _tokenAmount >= minimumTimestampPayment,
+            (_tokenAmount * newLevelPricing) >=
+                (10 ** token.decimals()) * (minimumTimestampPayment),
             "SubscriptionManager: subscription period is too low"
         );
 
-        uint256 currentLevelPricing = pricing[
-            daoSubscription.subscriptionLevel
-        ];
+        uint64 currentLevelPricing = pricing[daoSubscription.subscriptionLevel];
 
-        // recalculation of remaining valid subscription
-        uint256 alreadyPaidAmount = MathUpgradeable.max(
-            0,
-            (daoSubscription.timestamp - block.timestamp) / currentLevelPricing
-        );
+        uint256 alreadyPaidAmount = daoSubscription.timestamp >
+            block.timestamp * (10 ** token.decimals())
+            ? (daoSubscription.timestamp -
+                block.timestamp *
+                (10 ** token.decimals())) / currentLevelPricing
+            : 0;
 
-        uint64 newTimestamp = SafeCast.toUint64(
-            (newLevelPricing * (_tokenAmount + alreadyPaidAmount)) +
-                block.timestamp
-        );
+        uint256 newTimestamp = (newLevelPricing *
+            (_tokenAmount + alreadyPaidAmount)) +
+            block.timestamp *
+            (10 ** token.decimals());
 
         daoSubscription.subscriptionLevel = _level;
         daoSubscription.timestamp = newTimestamp;
@@ -161,19 +163,20 @@ contract SubscriptionManager is
         emit PaySubscription(_chainId, _dao, _level, newTimestamp);
     }
 
-    function payWith1155(
+    function payWithERC1155(
         uint256 _chainId,
         address _dao,
         address _tokenAddress,
         uint256 _tokenId
     ) external {
         Subscription storage daoSubscription = subscriptions[_chainId][_dao];
-        Subscription storage tokenSubscription = receivable1155[_tokenAddress][
-            _tokenId
-        ];
+        Subscription storage tokenSubscription = receivableERC1155[
+            _tokenAddress
+        ][_tokenId];
 
         require(
-            daoSubscription.timestamp < block.timestamp ||
+            daoSubscription.timestamp <
+                block.timestamp * (10 ** token.decimals()) ||
                 (tokenSubscription.subscriptionLevel >=
                     daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
@@ -184,23 +187,21 @@ contract SubscriptionManager is
             "SubscriptionManager: unsupported ERC1155"
         );
 
-        uint256 newLevelPricing = pricing[tokenSubscription.subscriptionLevel];
+        uint64 newLevelPricing = pricing[tokenSubscription.subscriptionLevel];
 
-        uint256 currentLevelPricing = pricing[
-            daoSubscription.subscriptionLevel
-        ];
+        uint64 currentLevelPricing = pricing[daoSubscription.subscriptionLevel];
 
-        // recalculation of remaining valid subscription
-        uint256 alreadyPaidAmount = MathUpgradeable.max(
-            0,
-            (daoSubscription.timestamp - block.timestamp) / currentLevelPricing
-        );
+        uint256 alreadyPaidAmount = daoSubscription.timestamp >
+            block.timestamp * (10 ** token.decimals())
+            ? (daoSubscription.timestamp -
+                block.timestamp *
+                (10 ** token.decimals())) / currentLevelPricing
+            : 0;
 
-        uint64 newTimestamp = SafeCast.toUint64(
-            (newLevelPricing * alreadyPaidAmount) +
-                tokenSubscription.timestamp +
-                block.timestamp
-        );
+        uint256 newTimestamp = (newLevelPricing * alreadyPaidAmount) +
+            tokenSubscription.timestamp +
+            block.timestamp *
+            (10 ** token.decimals());
 
         daoSubscription.subscriptionLevel = tokenSubscription.subscriptionLevel;
         daoSubscription.timestamp = newTimestamp;
@@ -213,7 +214,7 @@ contract SubscriptionManager is
             hex""
         );
 
-        emit PaySubscriptionWith1155(
+        emit PaySubscriptionWithERC1155(
             _chainId,
             _dao,
             _tokenAddress,
