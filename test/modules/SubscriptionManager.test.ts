@@ -102,7 +102,7 @@ describe('SubscriptionManager', () => {
     await expect(
       subscriptionManager
         .connect(signer)
-        .setSubscription(1, firstDao.address, 0, BigNumber.from(2592000))
+        .setSubscriptionStatus(1, firstDao.address, 0, BigNumber.from(2592000))
     ).to.be.reverted
 
     await expect(
@@ -163,7 +163,7 @@ describe('SubscriptionManager', () => {
 
     await subscriptionManager
       .connect(manager)
-      .setSubscription(1, firstDao.address, 1, BigNumber.from(2592000))
+      .setSubscriptionStatus(1, firstDao.address, 1, BigNumber.from(2592000))
 
     const firstDaoSubscription = await subscriptionManager.subscriptions(
       1,

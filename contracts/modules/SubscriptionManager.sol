@@ -65,7 +65,7 @@ contract SubscriptionManager is
         IERC20Upgradeable _token,
         address _recipientAddress,
         uint64 _minimumTimestampPayment,
-        uint8 decimals
+        uint8 _decimals
     ) public initializer {
         __Ownable_init();
         __AccessControl_init();
@@ -77,7 +77,7 @@ contract SubscriptionManager is
         token = _token;
         recipientAddress = _recipientAddress;
         minimumTimestampPayment = _minimumTimestampPayment;
-        decimalPostfix = 10 ** decimals;
+        decimalPostfix = 10 ** _decimals;
     }
 
     function editMinimumTimestampPayment(
@@ -111,7 +111,7 @@ contract SubscriptionManager is
         });
     }
 
-    function setSubscription(
+    function setSubscriptionStatus(
         uint256 _chainId,
         address _dao,
         uint8 _level,
