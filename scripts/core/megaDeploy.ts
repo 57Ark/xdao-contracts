@@ -294,7 +294,8 @@ async function main() {
     [
       xdaoToken.address,
       await factory.daoAt(0),
-      BigNumber.from(2592000) // 30 days
+      BigNumber.from(2592000), // 30 days
+      18
     ]
   )) as SubscriptionManager
 

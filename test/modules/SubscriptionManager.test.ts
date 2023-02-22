@@ -68,7 +68,7 @@ describe('SubscriptionManager', () => {
 
     subscriptionManager = (await upgrades.deployProxy(
       await ethers.getContractFactory('SubscriptionManager'),
-      [xdaoToken.address, recipient.address, BigNumber.from(2592000)]
+      [xdaoToken.address, recipient.address, BigNumber.from(2592000), 18]
     )) as SubscriptionManager
 
     await subscriptionManager.deployed()
@@ -147,7 +147,9 @@ describe('SubscriptionManager', () => {
     await subscriptionManager
       .connect(owner)
       .editPricing(0, BigNumber.from(129600))
-    expect(await subscriptionManager.pricing(0)).to.eql(BigNumber.from(129600))
+    expect(await subscriptionManager.timestampPricing(0)).to.eql(
+      BigNumber.from(129600)
+    )
 
     await subscriptionManager
       .connect(owner)
@@ -157,7 +159,7 @@ describe('SubscriptionManager', () => {
       0
     )
     expect(awardSubscription.subscriptionLevel).to.eql(0)
-    expect(awardSubscription.timestamp).to.eql(parseEther('2592000'))
+    expect(awardSubscription.period).to.eql(parseEther('2592000'))
 
     await subscriptionManager
       .connect(manager)
@@ -168,7 +170,7 @@ describe('SubscriptionManager', () => {
       firstDao.address
     )
     expect(firstDaoSubscription.subscriptionLevel).to.eql(1)
-    expect(firstDaoSubscription.timestamp).to.eql(parseEther('2592000'))
+    expect(firstDaoSubscription.endTimestamp).to.eql(parseEther('2592000'))
   })
 
   describe('Payment', () => {
@@ -219,7 +221,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(firstDaoSubscription.timestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestamp).to.be.eq(
           parseEther((2592000 + firstPaymentTimestamp).toString())
         )
 
@@ -242,22 +244,22 @@ describe('SubscriptionManager', () => {
         )
 
         expect(secondDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(secondDaoSubscription.timestamp).to.be.eq(
+        expect(secondDaoSubscription.endTimestamp).to.be.eq(
           parseEther((2 * 2592000 + secondPaymentTimestamp).toString())
         )
 
         expect(
           (await subscriptionManager.subscriptions(1, secondDao.address))
-            .timestamp
+            .endTimestamp
         ).to.be.eq(parseEther('0'))
 
         expect(
           (await subscriptionManager.subscriptions(137, firstDao.address))
-            .timestamp
+            .endTimestamp
         ).to.be.eq(parseEther('0'))
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(firstDaoSubscription.timestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestamp).to.be.eq(
           parseEther((2592000 + firstPaymentTimestamp).toString())
         )
 
@@ -301,7 +303,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(1)
-        expect(firstDaoSubscription.timestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestamp).to.be.eq(
           parseEther(expectingTimestamp.toString())
         )
 
@@ -362,7 +364,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(firstDaoSubscription.timestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestamp).to.be.eq(
           parseEther((2592000 + firstPaymentTimestamp).toString())
         )
 
@@ -405,7 +407,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(1)
-        expect(firstDaoSubscription.timestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestamp).to.be.eq(
           parseEther(expectingTimestamp.toString())
         )
 

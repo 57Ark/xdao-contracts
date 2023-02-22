@@ -4,7 +4,7 @@ pragma solidity ^0.8.6;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/IERC1155Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
@@ -15,27 +15,34 @@ contract SubscriptionManager is
     UUPSUpgradeable,
     AccessControlEnumerableUpgradeable
 {
-    using SafeERC20Upgradeable for ERC20Upgradeable;
+    using SafeERC20Upgradeable for IERC20Upgradeable;
 
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
-    ERC20Upgradeable public token;
+    IERC20Upgradeable public token;
     address public recipientAddress;
     uint64 public minimumTimestampPayment;
+    uint256 public decimalPostfix;
 
-    struct Subscription {
+    struct SubscriptionStatus {
         uint8 subscriptionLevel;
-        uint256 timestamp; // this timestamp is multiplied by 10 ** token.decimals()
+        uint256 endTimestamp; // this timestamp is multiplied by decimalPostfix
+    }
+
+    struct SubscriptionParameters {
+        uint8 subscriptionLevel;
+        uint256 period; // timestamp  multiplied by decimalPostfix
     }
 
     // Chain ID => DAO Address => Current Subscription
-    mapping(uint256 => mapping(address => Subscription)) public subscriptions;
+    mapping(uint256 => mapping(address => SubscriptionStatus))
+        public subscriptions;
 
     // Subscription Level => Timestamp per 1 Token
-    mapping(uint8 => uint64) public pricing;
+    mapping(uint8 => uint64) public timestampPricing;
 
     // NFT Address => Token ID => Issuing Subscription
-    mapping(address => mapping(uint256 => Subscription))
+    mapping(address => mapping(uint256 => SubscriptionParameters))
         public receivableERC1155;
 
     event PaySubscription(
@@ -55,9 +62,10 @@ contract SubscriptionManager is
     );
 
     function initialize(
-        ERC20Upgradeable _token,
+        IERC20Upgradeable _token,
         address _recipientAddress,
-        uint64 _minimumTimestampPayment
+        uint64 _minimumTimestampPayment,
+        uint8 decimals
     ) public initializer {
         __Ownable_init();
         __AccessControl_init();
@@ -69,6 +77,7 @@ contract SubscriptionManager is
         token = _token;
         recipientAddress = _recipientAddress;
         minimumTimestampPayment = _minimumTimestampPayment;
+        decimalPostfix = 10 ** decimals;
     }
 
     function editMinimumTimestampPayment(
@@ -87,7 +96,7 @@ contract SubscriptionManager is
         uint8 _subscriptionLevel,
         uint64 _timestamp
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        pricing[_subscriptionLevel] = _timestamp;
+        timestampPricing[_subscriptionLevel] = _timestamp;
     }
 
     function editReceivableERC1155(
@@ -96,9 +105,9 @@ contract SubscriptionManager is
         uint8 _subscriptionLevel,
         uint64 _timestamp
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        receivableERC1155[_tokenAddress][_tokenId] = Subscription({
+        receivableERC1155[_tokenAddress][_tokenId] = SubscriptionParameters({
             subscriptionLevel: _subscriptionLevel,
-            timestamp: _timestamp * (10 ** token.decimals())
+            period: _timestamp * decimalPostfix
         });
     }
 
@@ -108,9 +117,10 @@ contract SubscriptionManager is
         uint8 _level,
         uint64 _timestamp
     ) external onlyRole(MANAGER_ROLE) {
-        Subscription storage daoSubscription = subscriptions[_chainId][_dao];
-        daoSubscription.subscriptionLevel = _level;
-        daoSubscription.timestamp = _timestamp * (10 ** token.decimals());
+        subscriptions[_chainId][_dao] = SubscriptionStatus({
+            subscriptionLevel: _level,
+            endTimestamp: _timestamp * decimalPostfix
+        });
     }
 
     function pay(
@@ -119,16 +129,17 @@ contract SubscriptionManager is
         uint8 _level,
         uint256 _tokenAmount
     ) external {
-        Subscription storage daoSubscription = subscriptions[_chainId][_dao];
+        SubscriptionStatus storage daoSubscription = subscriptions[_chainId][
+            _dao
+        ];
 
         require(
-            daoSubscription.timestamp <
-                block.timestamp * (10 ** token.decimals()) ||
+            daoSubscription.endTimestamp < block.timestamp * decimalPostfix ||
                 (_level >= daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
         );
 
-        uint64 newLevelPricing = pricing[_level];
+        uint64 newLevelPricing = timestampPricing[_level];
 
         require(
             newLevelPricing > 0,
@@ -137,26 +148,30 @@ contract SubscriptionManager is
 
         require(
             (_tokenAmount * newLevelPricing) >=
-                (10 ** token.decimals()) * (minimumTimestampPayment),
+                decimalPostfix * (minimumTimestampPayment),
             "SubscriptionManager: subscription period is too low"
         );
 
-        uint64 currentLevelPricing = pricing[daoSubscription.subscriptionLevel];
+        uint64 currentLevelPricing = timestampPricing[
+            daoSubscription.subscriptionLevel
+        ];
 
-        uint256 alreadyPaidAmount = daoSubscription.timestamp >
-            block.timestamp * (10 ** token.decimals())
-            ? (daoSubscription.timestamp -
+        uint256 alreadyPaidAmount = daoSubscription.endTimestamp >
+            block.timestamp * decimalPostfix
+            ? (daoSubscription.endTimestamp -
                 block.timestamp *
-                (10 ** token.decimals())) / currentLevelPricing
+                decimalPostfix) / currentLevelPricing
             : 0;
 
         uint256 newTimestamp = (newLevelPricing *
             (_tokenAmount + alreadyPaidAmount)) +
             block.timestamp *
-            (10 ** token.decimals());
+            decimalPostfix;
 
-        daoSubscription.subscriptionLevel = _level;
-        daoSubscription.timestamp = newTimestamp;
+        subscriptions[_chainId][_dao] = SubscriptionStatus({
+            subscriptionLevel: _level,
+            endTimestamp: newTimestamp
+        });
 
         token.safeTransferFrom(msg.sender, recipientAddress, _tokenAmount);
 
@@ -169,42 +184,49 @@ contract SubscriptionManager is
         address _tokenAddress,
         uint256 _tokenId
     ) external {
-        Subscription storage daoSubscription = subscriptions[_chainId][_dao];
-        Subscription storage tokenSubscription = receivableERC1155[
+        SubscriptionStatus storage daoSubscription = subscriptions[_chainId][
+            _dao
+        ];
+        SubscriptionParameters storage tokenSubscription = receivableERC1155[
             _tokenAddress
         ][_tokenId];
 
         require(
-            daoSubscription.timestamp <
-                block.timestamp * (10 ** token.decimals()) ||
+            daoSubscription.endTimestamp < block.timestamp * decimalPostfix ||
                 (tokenSubscription.subscriptionLevel >=
                     daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
         );
 
         require(
-            tokenSubscription.timestamp > 0,
+            tokenSubscription.period > 0,
             "SubscriptionManager: unsupported ERC1155"
         );
 
-        uint64 newLevelPricing = pricing[tokenSubscription.subscriptionLevel];
+        uint64 newLevelPricing = timestampPricing[
+            tokenSubscription.subscriptionLevel
+        ];
 
-        uint64 currentLevelPricing = pricing[daoSubscription.subscriptionLevel];
+        uint64 currentLevelPricing = timestampPricing[
+            daoSubscription.subscriptionLevel
+        ];
 
-        uint256 alreadyPaidAmount = daoSubscription.timestamp >
-            block.timestamp * (10 ** token.decimals())
-            ? (daoSubscription.timestamp -
+        uint256 alreadyPaidAmount = daoSubscription.endTimestamp >
+            block.timestamp * decimalPostfix
+            ? (daoSubscription.endTimestamp -
                 block.timestamp *
-                (10 ** token.decimals())) / currentLevelPricing
+                decimalPostfix) / currentLevelPricing
             : 0;
 
         uint256 newTimestamp = (newLevelPricing * alreadyPaidAmount) +
-            tokenSubscription.timestamp +
+            tokenSubscription.period +
             block.timestamp *
-            (10 ** token.decimals());
+            decimalPostfix;
 
-        daoSubscription.subscriptionLevel = tokenSubscription.subscriptionLevel;
-        daoSubscription.timestamp = newTimestamp;
+        subscriptions[_chainId][_dao] = SubscriptionStatus({
+            subscriptionLevel: tokenSubscription.subscriptionLevel,
+            endTimestamp: newTimestamp
+        });
 
         IERC1155Upgradeable(_tokenAddress).safeTransferFrom(
             msg.sender,
