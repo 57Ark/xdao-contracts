@@ -326,8 +326,6 @@ async function main() {
   ) // 90 days
 
   console.log('Done')
-
-  await new Promise((resolve) => setTimeout(resolve, 1000000))
 }
 
 main()
