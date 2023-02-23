@@ -12,6 +12,7 @@ import {
   Shop,
   Shop__factory,
   SubscriptionManager,
+  Token__factory,
   XDAO,
   XDAO__factory,
   XDAOQuestAwards,
@@ -134,6 +135,12 @@ describe('SubscriptionManager', () => {
         )
     ).to.be.reverted
 
+    const usdc = await new Token__factory(signer).deploy()
+
+    await expect(
+      subscriptionManager.connect(manager).editToken(usdc.address, 18)
+    ).to.be.reverted
+
     await subscriptionManager
       .connect(owner)
       .editMinimumTimestampPayment(BigNumber.from(1296000))
@@ -171,6 +178,9 @@ describe('SubscriptionManager', () => {
     )
     expect(firstDaoSubscription.subscriptionLevel).to.eql(1)
     expect(firstDaoSubscription.endTimestamp).to.eql(parseEther('2592000'))
+
+    await subscriptionManager.connect(owner).editToken(usdc.address, 18)
+    expect(await subscriptionManager.token()).to.eql(usdc.address)
   })
 
   describe('Payment', () => {

@@ -80,6 +80,14 @@ contract SubscriptionManager is
         decimalPostfix = 10 ** _decimals;
     }
 
+    function editToken(
+        IERC20Upgradeable _token,
+        uint8 _decimals
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        token = _token;
+        decimalPostfix = 10 ** _decimals;
+    }
+
     function editMinimumTimestampPayment(
         uint64 _minimumTimestampPayment
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
