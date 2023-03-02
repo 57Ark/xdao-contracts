@@ -22,7 +22,7 @@ contract SubscriptionManager is
     IERC20Upgradeable public token;
     address public recipientAddress;
     uint64 public minDuration;
-    uint256 public constant decimalPostfix = 1e18;
+    uint256 constant uUNIT = 1e18;
 
     struct SubscriptionStatus {
         uint8 subscriptionLevel;
@@ -111,7 +111,7 @@ contract SubscriptionManager is
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         receivableERC1155[_tokenAddress][_tokenId] = SubscriptionParameters({
             subscriptionLevel: _subscriptionLevel,
-            period: _timestamp * decimalPostfix
+            period: _timestamp * uUNIT
         });
     }
 
@@ -123,7 +123,7 @@ contract SubscriptionManager is
     ) external onlyRole(MANAGER_ROLE) {
         subscriptions[_chainId][_dao] = SubscriptionStatus({
             subscriptionLevel: _level,
-            endTimestamp: _timestamp * decimalPostfix
+            endTimestamp: _timestamp * uUNIT
         });
     }
 
@@ -138,7 +138,7 @@ contract SubscriptionManager is
         ];
 
         require(
-            daoSubscription.endTimestamp < block.timestamp * decimalPostfix ||
+            daoSubscription.endTimestamp < block.timestamp * uUNIT ||
                 (_level >= daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
         );
@@ -151,7 +151,7 @@ contract SubscriptionManager is
         );
 
         require(
-            (_tokenAmount * newLevelPricing) >= decimalPostfix * (minDuration),
+            (_tokenAmount * newLevelPricing) >= uUNIT * (minDuration),
             "SubscriptionManager: subscription period is too low"
         );
 
@@ -160,16 +160,13 @@ contract SubscriptionManager is
         ];
 
         uint256 alreadyPaidAmount = daoSubscription.endTimestamp >
-            block.timestamp * decimalPostfix
-            ? (daoSubscription.endTimestamp -
-                block.timestamp *
-                decimalPostfix) / currentLevelPricing
+            block.timestamp * uUNIT
+            ? (daoSubscription.endTimestamp - block.timestamp * uUNIT) /
+                currentLevelPricing
             : 0;
 
         uint256 newTimestamp = (newLevelPricing *
-            (_tokenAmount + alreadyPaidAmount)) +
-            block.timestamp *
-            decimalPostfix;
+            (_tokenAmount + alreadyPaidAmount)) + block.timestamp * uUNIT;
 
         subscriptions[_chainId][_dao] = SubscriptionStatus({
             subscriptionLevel: _level,
@@ -195,7 +192,7 @@ contract SubscriptionManager is
         ][_tokenId];
 
         require(
-            daoSubscription.endTimestamp < block.timestamp * decimalPostfix ||
+            daoSubscription.endTimestamp < block.timestamp * uUNIT ||
                 (tokenSubscription.subscriptionLevel >=
                     daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
@@ -215,16 +212,15 @@ contract SubscriptionManager is
         ];
 
         uint256 alreadyPaidAmount = daoSubscription.endTimestamp >
-            block.timestamp * decimalPostfix
-            ? (daoSubscription.endTimestamp -
-                block.timestamp *
-                decimalPostfix) / currentLevelPricing
+            block.timestamp * uUNIT
+            ? (daoSubscription.endTimestamp - block.timestamp * uUNIT) /
+                currentLevelPricing
             : 0;
 
         uint256 newTimestamp = (newLevelPricing * alreadyPaidAmount) +
             tokenSubscription.period +
             block.timestamp *
-            decimalPostfix;
+            uUNIT;
 
         subscriptions[_chainId][_dao] = SubscriptionStatus({
             subscriptionLevel: tokenSubscription.subscriptionLevel,
