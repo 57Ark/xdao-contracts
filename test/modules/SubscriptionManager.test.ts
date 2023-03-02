@@ -69,7 +69,7 @@ describe('SubscriptionManager', () => {
 
     subscriptionManager = (await upgrades.deployProxy(
       await ethers.getContractFactory('SubscriptionManager'),
-      [xdaoToken.address, recipient.address, BigNumber.from(2592000), 18]
+      [xdaoToken.address, recipient.address, BigNumber.from(2592000)]
     )) as SubscriptionManager
 
     await subscriptionManager.deployed()
@@ -82,13 +82,15 @@ describe('SubscriptionManager', () => {
     await expect(
       subscriptionManager
         .connect(signer)
-        .editMinimumTimestampPayment(BigNumber.from(1296000))
+        .editMinDuration(BigNumber.from(1296000))
     ).to.be.reverted
     await expect(
       subscriptionManager.connect(signer).editRecipient(signer.address)
     ).to.be.reverted
     await expect(
-      subscriptionManager.connect(signer).editPricing(0, BigNumber.from(129600))
+      subscriptionManager
+        .connect(signer)
+        .editDurationPerToken(0, BigNumber.from(129600))
     ).to.be.reverted
     await expect(
       subscriptionManager
@@ -109,7 +111,7 @@ describe('SubscriptionManager', () => {
     await expect(
       subscriptionManager
         .connect(manager)
-        .editMinimumTimestampPayment(BigNumber.from(1296000))
+        .editMinDuration(BigNumber.from(1296000))
     ).to.be.reverted
     await expect(
       subscriptionManager.connect(manager).editRecipient(manager.address)
@@ -117,7 +119,7 @@ describe('SubscriptionManager', () => {
     await expect(
       subscriptionManager
         .connect(manager)
-        .editPricing(0, BigNumber.from(129600))
+        .editDurationPerToken(0, BigNumber.from(129600))
     ).to.be.reverted
 
     await xdaoAwards
@@ -137,14 +139,13 @@ describe('SubscriptionManager', () => {
 
     const usdc = await new Token__factory(signer).deploy()
 
-    await expect(
-      subscriptionManager.connect(manager).editToken(usdc.address, 18)
-    ).to.be.reverted
+    await expect(subscriptionManager.connect(manager).editToken(usdc.address))
+      .to.be.reverted
 
     await subscriptionManager
       .connect(owner)
-      .editMinimumTimestampPayment(BigNumber.from(1296000))
-    expect(await subscriptionManager.minimumTimestampPayment()).to.eql(
+      .editMinDuration(BigNumber.from(1296000))
+    expect(await subscriptionManager.minDuration()).to.eql(
       BigNumber.from(1296000)
     )
 
@@ -153,8 +154,8 @@ describe('SubscriptionManager', () => {
 
     await subscriptionManager
       .connect(owner)
-      .editPricing(0, BigNumber.from(129600))
-    expect(await subscriptionManager.timestampPricing(0)).to.eql(
+      .editDurationPerToken(0, BigNumber.from(129600))
+    expect(await subscriptionManager.durationPerToken(0)).to.eql(
       BigNumber.from(129600)
     )
 
@@ -165,6 +166,7 @@ describe('SubscriptionManager', () => {
       xdaoAwards.address,
       0
     )
+
     expect(awardSubscription.subscriptionLevel).to.eql(0)
     expect(awardSubscription.period).to.eql(parseEther('2592000'))
 
@@ -179,7 +181,7 @@ describe('SubscriptionManager', () => {
     expect(firstDaoSubscription.subscriptionLevel).to.eql(1)
     expect(firstDaoSubscription.endTimestamp).to.eql(parseEther('2592000'))
 
-    await subscriptionManager.connect(owner).editToken(usdc.address, 18)
+    await subscriptionManager.connect(owner).editToken(usdc.address)
     expect(await subscriptionManager.token()).to.eql(usdc.address)
   })
 
@@ -187,11 +189,11 @@ describe('SubscriptionManager', () => {
     beforeEach(async () => {
       await subscriptionManager
         .connect(owner)
-        .editPricing(0, BigNumber.from(129600)) // 20 tokens per mo
+        .editDurationPerToken(0, BigNumber.from(129600)) // 20 tokens per mo
 
       await subscriptionManager
         .connect(owner)
-        .editPricing(1, BigNumber.from(51840)) // 50 tokens per mo
+        .editDurationPerToken(1, BigNumber.from(51840)) // 50 tokens per mo
     })
 
     describe('Token Payment', () => {

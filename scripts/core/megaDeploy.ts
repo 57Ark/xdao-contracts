@@ -294,8 +294,7 @@ async function main() {
     [
       xdaoToken.address,
       await factory.daoAt(0),
-      BigNumber.from(2592000), // 30 days
-      18
+      BigNumber.from(2592000) // 30 days
     ]
   )) as SubscriptionManager
 
@@ -310,8 +309,8 @@ async function main() {
     await subscriptionManager.MANAGER_ROLE(),
     friend.address
   )
-  await subscriptionManager.editPricing(0, BigNumber.from(129600)) // 30 days per 20 tokens
-  await subscriptionManager.editPricing(1, BigNumber.from(25920)) // 30 days per 100 tokens
+  await subscriptionManager.editDurationPerToken(0, BigNumber.from(129600)) // 30 days per 20 tokens
+  await subscriptionManager.editDurationPerToken(1, BigNumber.from(25920)) // 30 days per 100 tokens
 
   await subscriptionManager.editReceivableERC1155(
     xdaoAwards.address,

@@ -21,17 +21,17 @@ contract SubscriptionManager is
 
     IERC20Upgradeable public token;
     address public recipientAddress;
-    uint64 public minimumTimestampPayment;
-    uint256 public decimalPostfix;
+    uint64 public minDuration;
+    uint256 public constant decimalPostfix = 1e18;
 
     struct SubscriptionStatus {
         uint8 subscriptionLevel;
-        uint256 endTimestamp; // this timestamp is multiplied by decimalPostfix
+        uint256 endTimestamp; // this timestamp is multiplied by 1e18
     }
 
     struct SubscriptionParameters {
         uint8 subscriptionLevel;
-        uint256 period; // timestamp  multiplied by decimalPostfix
+        uint256 period; // timestamp  multiplied by 1e18
     }
 
     // Chain ID => DAO Address => Current Subscription
@@ -39,7 +39,7 @@ contract SubscriptionManager is
         public subscriptions;
 
     // Subscription Level => Timestamp per 1 Token
-    mapping(uint8 => uint64) public timestampPricing;
+    mapping(uint8 => uint64) public durationPerToken;
 
     // NFT Address => Token ID => Issuing Subscription
     mapping(address => mapping(uint256 => SubscriptionParameters))
@@ -64,8 +64,7 @@ contract SubscriptionManager is
     function initialize(
         IERC20Upgradeable _token,
         address _recipientAddress,
-        uint64 _minimumTimestampPayment,
-        uint8 _decimals
+        uint64 _minDuration
     ) public initializer {
         __Ownable_init();
         __AccessControl_init();
@@ -76,22 +75,19 @@ contract SubscriptionManager is
 
         token = _token;
         recipientAddress = _recipientAddress;
-        minimumTimestampPayment = _minimumTimestampPayment;
-        decimalPostfix = 10 ** _decimals;
+        minDuration = _minDuration;
     }
 
     function editToken(
-        IERC20Upgradeable _token,
-        uint8 _decimals
+        IERC20Upgradeable _token
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         token = _token;
-        decimalPostfix = 10 ** _decimals;
     }
 
-    function editMinimumTimestampPayment(
-        uint64 _minimumTimestampPayment
+    function editMinDuration(
+        uint64 _minDuration
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        minimumTimestampPayment = _minimumTimestampPayment;
+        minDuration = _minDuration;
     }
 
     function editRecipient(
@@ -100,11 +96,11 @@ contract SubscriptionManager is
         recipientAddress = _recipientAddress;
     }
 
-    function editPricing(
+    function editDurationPerToken(
         uint8 _subscriptionLevel,
         uint64 _timestamp
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        timestampPricing[_subscriptionLevel] = _timestamp;
+        durationPerToken[_subscriptionLevel] = _timestamp;
     }
 
     function editReceivableERC1155(
@@ -147,7 +143,7 @@ contract SubscriptionManager is
             "SubscriptionManager: subscription can't be downgraded"
         );
 
-        uint64 newLevelPricing = timestampPricing[_level];
+        uint64 newLevelPricing = durationPerToken[_level];
 
         require(
             newLevelPricing > 0,
@@ -155,12 +151,11 @@ contract SubscriptionManager is
         );
 
         require(
-            (_tokenAmount * newLevelPricing) >=
-                decimalPostfix * (minimumTimestampPayment),
+            (_tokenAmount * newLevelPricing) >= decimalPostfix * (minDuration),
             "SubscriptionManager: subscription period is too low"
         );
 
-        uint64 currentLevelPricing = timestampPricing[
+        uint64 currentLevelPricing = durationPerToken[
             daoSubscription.subscriptionLevel
         ];
 
@@ -211,11 +206,11 @@ contract SubscriptionManager is
             "SubscriptionManager: unsupported ERC1155"
         );
 
-        uint64 newLevelPricing = timestampPricing[
+        uint64 newLevelPricing = durationPerToken[
             tokenSubscription.subscriptionLevel
         ];
 
-        uint64 currentLevelPricing = timestampPricing[
+        uint64 currentLevelPricing = durationPerToken[
             daoSubscription.subscriptionLevel
         ];
 
