@@ -26,19 +26,19 @@ contract SubscriptionManager is
 
     struct SubscriptionStatus {
         uint8 subscriptionLevel;
-        uint256 endTimestamp; // this timestamp is multiplied by 1e18
+        uint256 endTimestampScaled;
     }
 
     struct SubscriptionParameters {
         uint8 subscriptionLevel;
-        uint256 period; // timestamp  multiplied by 1e18
+        uint256 durationScaled;
     }
 
     // Chain ID => DAO Address => Current Subscription
     mapping(uint256 => mapping(address => SubscriptionStatus))
         public subscriptions;
 
-    // Subscription Level => Timestamp per 1 Token
+    // Subscription Level => Duration per 1 Token
     mapping(uint8 => uint64) public durationPerToken;
 
     // NFT Address => Token ID => Issuing Subscription
@@ -111,7 +111,7 @@ contract SubscriptionManager is
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         receivableERC1155[_tokenAddress][_tokenId] = SubscriptionParameters({
             subscriptionLevel: _subscriptionLevel,
-            period: _timestamp * uUNIT
+            durationScaled: _timestamp * uUNIT
         });
     }
 
@@ -123,7 +123,7 @@ contract SubscriptionManager is
     ) external onlyRole(MANAGER_ROLE) {
         subscriptions[_chainId][_dao] = SubscriptionStatus({
             subscriptionLevel: _level,
-            endTimestamp: _timestamp * uUNIT
+            endTimestampScaled: _timestamp * uUNIT
         });
     }
 
@@ -138,44 +138,44 @@ contract SubscriptionManager is
         ];
 
         require(
-            daoSubscription.endTimestamp < block.timestamp * uUNIT ||
+            daoSubscription.endTimestampScaled < block.timestamp * uUNIT ||
                 (_level >= daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
         );
 
-        uint64 newLevelPricing = durationPerToken[_level];
+        uint64 newLevelDuration = durationPerToken[_level];
 
         require(
-            newLevelPricing > 0,
+            newLevelDuration > 0,
             "SubscriptionManager: invalid subscription level"
         );
 
         require(
-            (_tokenAmount * newLevelPricing) >= uUNIT * (minDuration),
-            "SubscriptionManager: subscription period is too low"
+            (_tokenAmount * newLevelDuration) >= uUNIT * (minDuration),
+            "SubscriptionManager: subscription durationScaled is too low"
         );
 
-        uint64 currentLevelPricing = durationPerToken[
+        uint64 currentLevelDuration = durationPerToken[
             daoSubscription.subscriptionLevel
         ];
 
-        uint256 alreadyPaidAmount = daoSubscription.endTimestamp >
+        uint256 alreadyPaidAmount = daoSubscription.endTimestampScaled >
             block.timestamp * uUNIT
-            ? (daoSubscription.endTimestamp - block.timestamp * uUNIT) /
-                currentLevelPricing
+            ? (daoSubscription.endTimestampScaled - block.timestamp * uUNIT) /
+                currentLevelDuration
             : 0;
 
-        uint256 newTimestamp = (newLevelPricing *
+        uint256 newTimestampScaled = (newLevelDuration *
             (_tokenAmount + alreadyPaidAmount)) + block.timestamp * uUNIT;
 
         subscriptions[_chainId][_dao] = SubscriptionStatus({
             subscriptionLevel: _level,
-            endTimestamp: newTimestamp
+            endTimestampScaled: newTimestampScaled
         });
 
         token.safeTransferFrom(msg.sender, recipientAddress, _tokenAmount);
 
-        emit PaySubscription(_chainId, _dao, _level, newTimestamp);
+        emit PaySubscription(_chainId, _dao, _level, newTimestampScaled);
     }
 
     function payWithERC1155(
@@ -192,39 +192,39 @@ contract SubscriptionManager is
         ][_tokenId];
 
         require(
-            daoSubscription.endTimestamp < block.timestamp * uUNIT ||
+            daoSubscription.endTimestampScaled < block.timestamp * uUNIT ||
                 (tokenSubscription.subscriptionLevel >=
                     daoSubscription.subscriptionLevel),
             "SubscriptionManager: subscription can't be downgraded"
         );
 
         require(
-            tokenSubscription.period > 0,
+            tokenSubscription.durationScaled > 0,
             "SubscriptionManager: unsupported ERC1155"
         );
 
-        uint64 newLevelPricing = durationPerToken[
+        uint64 newLevelDuration = durationPerToken[
             tokenSubscription.subscriptionLevel
         ];
 
-        uint64 currentLevelPricing = durationPerToken[
+        uint64 currentLevelDuration = durationPerToken[
             daoSubscription.subscriptionLevel
         ];
 
-        uint256 alreadyPaidAmount = daoSubscription.endTimestamp >
+        uint256 alreadyPaidAmount = daoSubscription.endTimestampScaled >
             block.timestamp * uUNIT
-            ? (daoSubscription.endTimestamp - block.timestamp * uUNIT) /
-                currentLevelPricing
+            ? (daoSubscription.endTimestampScaled - block.timestamp * uUNIT) /
+                currentLevelDuration
             : 0;
 
-        uint256 newTimestamp = (newLevelPricing * alreadyPaidAmount) +
-            tokenSubscription.period +
+        uint256 newTimestampScaled = (newLevelDuration * alreadyPaidAmount) +
+            tokenSubscription.durationScaled +
             block.timestamp *
             uUNIT;
 
         subscriptions[_chainId][_dao] = SubscriptionStatus({
             subscriptionLevel: tokenSubscription.subscriptionLevel,
-            endTimestamp: newTimestamp
+            endTimestampScaled: newTimestampScaled
         });
 
         IERC1155Upgradeable(_tokenAddress).safeTransferFrom(
@@ -241,7 +241,7 @@ contract SubscriptionManager is
             _tokenAddress,
             _tokenId,
             tokenSubscription.subscriptionLevel,
-            newTimestamp
+            newTimestampScaled
         );
     }
 

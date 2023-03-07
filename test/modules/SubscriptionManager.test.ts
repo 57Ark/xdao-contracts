@@ -168,7 +168,7 @@ describe('SubscriptionManager', () => {
     )
 
     expect(awardSubscription.subscriptionLevel).to.eql(0)
-    expect(awardSubscription.period).to.eql(parseEther('2592000'))
+    expect(awardSubscription.durationScaled).to.eql(parseEther('2592000'))
 
     await subscriptionManager
       .connect(manager)
@@ -179,7 +179,9 @@ describe('SubscriptionManager', () => {
       firstDao.address
     )
     expect(firstDaoSubscription.subscriptionLevel).to.eql(1)
-    expect(firstDaoSubscription.endTimestamp).to.eql(parseEther('2592000'))
+    expect(firstDaoSubscription.endTimestampScaled).to.eql(
+      parseEther('2592000')
+    )
 
     await subscriptionManager.connect(owner).editToken(usdc.address)
     expect(await subscriptionManager.token()).to.eql(usdc.address)
@@ -215,7 +217,7 @@ describe('SubscriptionManager', () => {
             .connect(owner)
             .pay(1, firstDao.address, 0, parseEther('19'))
         ).to.be.revertedWith(
-          'SubscriptionManager: subscription period is too low'
+          'SubscriptionManager: subscription durationScaled is too low'
         )
 
         await subscriptionManager
@@ -233,7 +235,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(firstDaoSubscription.endTimestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestampScaled).to.be.eq(
           parseEther((2592000 + firstPaymentTimestamp).toString())
         )
 
@@ -256,22 +258,22 @@ describe('SubscriptionManager', () => {
         )
 
         expect(secondDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(secondDaoSubscription.endTimestamp).to.be.eq(
+        expect(secondDaoSubscription.endTimestampScaled).to.be.eq(
           parseEther((2 * 2592000 + secondPaymentTimestamp).toString())
         )
 
         expect(
           (await subscriptionManager.subscriptions(1, secondDao.address))
-            .endTimestamp
+            .endTimestampScaled
         ).to.be.eq(parseEther('0'))
 
         expect(
           (await subscriptionManager.subscriptions(137, firstDao.address))
-            .endTimestamp
+            .endTimestampScaled
         ).to.be.eq(parseEther('0'))
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(firstDaoSubscription.endTimestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestampScaled).to.be.eq(
           parseEther((2592000 + firstPaymentTimestamp).toString())
         )
 
@@ -315,7 +317,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(1)
-        expect(firstDaoSubscription.endTimestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestampScaled).to.be.eq(
           parseEther(expectingTimestamp.toString())
         )
 
@@ -376,7 +378,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(0)
-        expect(firstDaoSubscription.endTimestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestampScaled).to.be.eq(
           parseEther((2592000 + firstPaymentTimestamp).toString())
         )
 
@@ -419,7 +421,7 @@ describe('SubscriptionManager', () => {
         )
 
         expect(firstDaoSubscription.subscriptionLevel).to.be.eq(1)
-        expect(firstDaoSubscription.endTimestamp).to.be.eq(
+        expect(firstDaoSubscription.endTimestampScaled).to.be.eq(
           parseEther(expectingTimestamp.toString())
         )
 
