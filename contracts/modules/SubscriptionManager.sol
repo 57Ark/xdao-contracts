@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.6;
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
@@ -11,7 +10,6 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgrad
 
 contract SubscriptionManager is
     Initializable,
-    OwnableUpgradeable,
     UUPSUpgradeable,
     AccessControlEnumerableUpgradeable
 {
@@ -66,7 +64,6 @@ contract SubscriptionManager is
         address _recipientAddress,
         uint64 _minDuration
     ) public initializer {
-        __Ownable_init();
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
@@ -247,5 +244,5 @@ contract SubscriptionManager is
 
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyOwner {}
+    ) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 }
