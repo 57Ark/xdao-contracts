@@ -1,11 +1,13 @@
 import dayjs from 'dayjs'
 import * as dotenv from 'dotenv'
 import { BigNumber } from 'ethers'
-import { parseEther } from 'ethers/lib/utils'
+import { arrayify, parseEther } from 'ethers/lib/utils'
 import { ethers, network, upgrades } from 'hardhat'
 
-import { executeTx } from '../../test/utils'
+import { createData, executeTx } from '../../test/utils'
 import {
+  Dao__factory,
+  DaoManager,
   DaoViewer__factory,
   DividendsModule__factory,
   DocumentSignModule,
@@ -26,7 +28,8 @@ dotenv.config()
 async function main() {
   await network.provider.request({ method: 'hardhat_reset', params: [] })
 
-  const [signer, friend] = await ethers.getSigners()
+  const [signer, friend, address1, address2, address3] =
+    await ethers.getSigners()
 
   const shop = await new Shop__factory(signer).deploy()
 
@@ -324,6 +327,75 @@ async function main() {
     1,
     BigNumber.from(7776000)
   ) // 90 days
+
+  const daoManager = (await upgrades.deployProxy(
+    await ethers.getContractFactory('DaoManager'),
+    [factory.address]
+  )) as DaoManager
+
+  console.log('DaoManager:', daoManager.address)
+
+  const AloneDAOAddress = await factory.daoAt(0)
+  const AloneDAO = await Dao__factory.connect(await factory.daoAt(0), signer)
+
+  await executeTx(
+    AloneDAOAddress,
+    AloneDAOAddress,
+    'addPermitted',
+    ['address'],
+    [daoManager.address],
+    0,
+    signer
+  )
+
+  console.log('AloneDAO: added DaoManager to permitted')
+
+  const timestamp = dayjs().unix()
+  const targetList = [AloneDAOAddress, AloneDAOAddress, AloneDAOAddress]
+  const dataList = [
+    createData('mint', ['address', 'uint256'], [address1.address, 1]),
+    createData('mint', ['address', 'uint256'], [address2.address, 2]),
+    createData('mint', ['address', 'uint256'], [address3.address, 3])
+  ]
+  const valueList = [0, 0, 0]
+
+  const data = createData(
+    'addArgsHash',
+    ['bytes32'],
+    [
+      await daoManager.calculateArgsHash(
+        AloneDAOAddress,
+        targetList,
+        dataList,
+        valueList
+      )
+    ]
+  )
+
+  const txHash = await AloneDAO.getTxHash(
+    daoManager.address,
+    data,
+    0,
+    0,
+    timestamp
+  )
+  const signature = await signer.signMessage(arrayify(txHash))
+
+  await daoManager.activate(
+    AloneDAOAddress,
+    targetList,
+    dataList,
+    valueList,
+    0,
+    timestamp,
+    [signature]
+  )
+
+  const balance1 = await AloneDAO.balanceOf(address1.address)
+  const balance2 = await AloneDAO.balanceOf(address2.address)
+  const balance3 = await AloneDAO.balanceOf(address3.address)
+
+  console.log('Balances:', balance1, balance2, balance3)
 
   console.log('Done')
 }
