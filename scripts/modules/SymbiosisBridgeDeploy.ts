@@ -15,6 +15,7 @@ interface SymbiosisBridgeAgruments {
 
 const feeAddress = process.env.BRIDGE_FEE_ADDRESS
 const feeRate = 50
+const ownerAddress = process.env.XDAO_DEPLOYER
 
 const NETWORK_ARGUMENTS: Record<number, SymbiosisBridgeAgruments> = {
   1: {
@@ -32,6 +33,14 @@ const NETWORK_ARGUMENTS: Record<number, SymbiosisBridgeAgruments> = {
   43114: {
     metaRouter: '0xE5E68630B5B759e6C701B70892AA8324b71e6e20',
     metaRouterGateway: '0x25821A21C2E3455967229cADCA9b6fdd4A80a40b'
+  },
+  10: {
+    metaRouter: '0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C',
+    metaRouterGateway: '0xAdB2d3b711Bb8d8Ea92ff70292c466140432c278'
+  },
+  42161: {
+    metaRouter: '0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C',
+    metaRouterGateway: '0xAdB2d3b711Bb8d8Ea92ff70292c466140432c278'
   },
   1337: {
     metaRouter: '0x733D33FA01424F83E9C095af3Ece80Ed6fa565F1',
@@ -57,6 +66,11 @@ const main = async () => {
     return
   }
 
+  try {
+    deleteLocalManifest()
+    // eslint-disable-next-line no-empty
+  } catch {}
+
   console.log(`Deploy Started with chain ID: ${chainId}`)
 
   const [signer] = await ethers.getSigners()
@@ -65,8 +79,6 @@ const main = async () => {
   console.log(`Network: ${network.name}-${chainId}`)
 
   console.log(`Bridge Fee Address: ${feeAddress}`)
-
-  deleteLocalManifest()
 
   const symbiosisAddresses = NETWORK_ARGUMENTS[chainId]
 
@@ -79,13 +91,14 @@ const main = async () => {
 
   const symbiosisBridge = (await deployProxy(
     await ethers.getContractFactory('SymbiosisBridge'),
-    [signer.address, metaRouter, metaRouterGateway, feeAddress, feeRate]
+    [ownerAddress, metaRouter, metaRouterGateway, feeAddress, feeRate]
   )) as SymbiosisBridge
 
   await symbiosisBridge.deployed()
 
   console.log({ symbiosisBridge: symbiosisBridge.address })
-  renameLocalManifest('SymbiosisBridge')
+
+  console.log('LaunchpadModule: SetCoreAddresses Success')
 
   const implementationAddress = await upgrades.erc1967.getImplementationAddress(
     symbiosisBridge.address
@@ -96,6 +109,11 @@ const main = async () => {
   )
 
   console.log(`SymbiosisBridge owner address: ${await symbiosisBridge.owner()}`)
+
+  try {
+    renameLocalManifest('SymbiosisBridge')
+    // eslint-disable-next-line no-empty
+  } catch {}
 
   await new Promise((r) => setTimeout(r, 10000))
 

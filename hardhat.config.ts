@@ -10,7 +10,10 @@ import 'hardhat-tracer'
 import 'solidity-coverage'
 import 'dotenv/config'
 
+import { config as dotEnvConfig } from 'dotenv'
 import { HardhatUserConfig } from 'hardhat/config'
+
+dotEnvConfig({ path: __dirname + '/.env' })
 
 const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
 
