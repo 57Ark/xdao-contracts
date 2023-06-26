@@ -1,34 +1,34 @@
-import * as dotenv from 'dotenv'
-import { ethers, run } from 'hardhat'
+import * as dotenv from "dotenv";
+import { ethers, run } from "hardhat";
 
-import { DividendsModule__factory } from '../../typechain-types'
+import { DividendsModule__factory } from "../../typechain-types";
 
-dotenv.config()
+dotenv.config();
 
 async function main() {
-  const [signer] = await ethers.getSigners()
+	const [signer] = await ethers.getSigners();
 
-  const dividendsModule = await new DividendsModule__factory(signer).deploy()
+	const dividendsModule = await new DividendsModule__factory(signer).deploy();
 
-  await dividendsModule.deployed()
+	await dividendsModule.deployed();
 
-  console.log('DividendsModule:', dividendsModule.address)
+	console.log("DividendsModule:", dividendsModule.address);
 
-  await new Promise((r) => setTimeout(r, 10000))
+	await new Promise((r) => setTimeout(r, 10000));
 
-  try {
-    await run('verify:verify', {
-      address: dividendsModule.address,
-      contract: 'contracts/modules/DividendsModule.sol:DividendsModule'
-    })
-  } catch {
-    console.log('Verification problem (DividendsModule)')
-  }
+	try {
+		await run("verify:verify", {
+			address: dividendsModule.address,
+			contract: "contracts/modules/DividendsModule.sol:DividendsModule",
+		});
+	} catch {
+		console.log("Verification problem (DividendsModule)");
+	}
 }
 
 main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error)
-    process.exit(1)
-  })
+	.then(() => process.exit(0))
+	.catch((error) => {
+		console.error(error);
+		process.exit(1);
+	});
