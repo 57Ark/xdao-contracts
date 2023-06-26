@@ -81,11 +81,15 @@ contract DaoVestingModule is
     }
 
     modifier onlyDao() {
+        _checkDao();
+        _;
+    }
+
+    function _checkDao() internal view {
         require(
             factory.containsDao(msg.sender),
             "VestingModule: only for DAOs"
         );
-        _;
     }
 
     modifier onlyPermittedContracts() {
@@ -100,7 +104,7 @@ contract DaoVestingModule is
     function _checkIndex(address _dao, uint256 _vestingId) internal view {
         require(
             numberOfVestings[_dao] > _vestingId,
-            "CrowdfundingModule: only for DAOs"
+            "VestingModule: invalid vesting id"
         );
     }
 

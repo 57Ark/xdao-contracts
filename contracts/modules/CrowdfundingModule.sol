@@ -53,11 +53,6 @@ contract CrowdfundingModule is
         uint256 allocation;
     }
 
-    struct ClaimerInfo {
-        uint256 allocation;
-        uint256 lastClaimedTimastamp;
-    }
-
     struct Whitelist {
         address investor;
         uint256 allocation;
@@ -66,20 +61,20 @@ contract CrowdfundingModule is
     mapping(address => uint256) public saleIndexes;
     // dao address => current sale index
     mapping(address => mapping(uint256 => Sale)) private crowdfundings;
-    // dao address => id => sale info
+    // dao address => sale index => sale info
 
     mapping(address => mapping(uint256 => mapping(address => InvestorInfo)))
         public investorsInfo;
-    // dao address => id => investor address => bought amount
+    // dao address => sale index => investor address => bought amount
 
     mapping(address => mapping(uint256 => uint256)) public totalBoughtAmount;
-    // dao address => id => total bought amount
+    // dao address => sale index => total bought amount
 
     mapping(address => mapping(uint256 => uint256)) public totalSoldTokenAmount;
-    // dao address => id => total sold token amount
+    // dao address => sale index => total sold token amount
 
     mapping(address => mapping(uint256 => uint256)) public filledTokenAmount;
-    // dao address => id => total filled token amount
+    // dao address => sale index => total filled token amount
 
     event InitSale(
         address indexed daoAddress,
