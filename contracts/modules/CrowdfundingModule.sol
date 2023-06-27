@@ -285,6 +285,8 @@ contract CrowdfundingModule is
         uint256 _saleIndex,
         uint256 _amount
     ) external {
+        require(factory.containsDao(_dao), "CrowdfundingModule: only for DAOs");
+
         Sale storage sale = crowdfundings[_dao][_saleIndex];
         IERC20Upgradeable(sale.tokenAddress).safeTransferFrom(
             msg.sender,
@@ -297,6 +299,8 @@ contract CrowdfundingModule is
     function closeSale(bool _isSendTokensBack) external onlyDao {
         uint256 currentIndex = saleIndexes[msg.sender];
         if (_isSendTokensBack) {
+            // I am not sure here. Maybe It will be better to remove _isSendTokensBack
+            // and check tokenAddress is not LP address then send tokens back if it's true
             address tokenAddress = crowdfundings[msg.sender][currentIndex]
                 .tokenAddress;
             uint256 tokenAmount = filledTokenAmount[msg.sender][currentIndex];
