@@ -40,6 +40,14 @@ async function main() {
   await VestingModule.deployed();
 
   await (
+    await CrowdfundingModule.setFee(
+      "0x333330cd9c430fae7536ed9684f511f229527e09",
+      500, // 5%
+      0 // 0%
+    )
+  ).wait();
+
+  await (
     await VestingModule.setCoreAddresses(
       "0x72cc6E4DE47f673062c41C67505188144a0a3D84",
       "0xCA49EcF7e7bb9bBc9D1d295384663F6BA5c0e366",
